@@ -1,11 +1,12 @@
 # Kaneohe Bay algae decline analysis
 # code originally written by Mary Donovan 2018
 # edited by Morgan Winston
-# last updated June 20 2023
+# last updated October 2023
 
 # INITIALIZATION ----------------------------------------------------------
 ## load required packages
 library(plyr)
+library(dplyr)
 library(reshape2)
 library(knitr)
 library(kableExtra)
@@ -17,19 +18,23 @@ library(tidyr)
 library(ggplot2)
 library(scales)
 '%!in%' <- function(x,y)!('%in%'(x,y)) # the opposite of %in%
+std <- function(x){(x-min(x))/(max(x)-min(x))}
 
-setwd("C:/Users/Morgan.Winston/Documents/GitHub/kaneohe-bay-algae-decline/data/working") # change to your wd
+setwd("~/Documents/GitHub/kbay_invasivealgae") # change to your wd
 
 # LOAD DATA & MANIPULATE -------------------------------------------------
-raw <- read.csv("final_kbay_08212023.csv") # load entire dataset - transect/benthic survey lvl
+raw <- read.csv("all_kbay_combined.csv") # load entire dataset - transect/benthic survey lvl
 raw$SurveyDate <- as.Date(raw$SurveyDate_benthic)
 raw$X <- NULL
 
-fishcombo_all <- read.csv("C:/Users/Morgan.Winston/Documents/GitHub/kaneohe-bay-algae-decline/data/working/new_fish.combo_08212023.csv") # slight different fish data:
+fishcombo_all <- read.csv("fishcombo_all.csv") # slight different fish data:
 ## ^ here, date value corresponds to the actual fish survey date, whereas the fish data in the combined dataset was summarized over the month to match the benthic survey date
 
 # drop reefs with very low invasive algae cover
 raw <- raw[which(raw$Reef %!in% c(12, 17, 22)),]
+
+# raw <- raw[which(raw$Reef %in% c(16, 26, 27, 29)),] # run this for comparison - to address reviewer concerns
+
 fishcombo_all <- fishcombo_all[which(fishcombo_all$Reef %!in% c(12, 17, 22)),]
 
 # make a index for time 
@@ -52,7 +57,7 @@ timego <- fulltime
 timego$mo_yr <- paste('1/',timego$Month,'/',timego$Year,sep="")
 timego$mo_yr <- as.Date(timego$mo_yr,'%d/%m/%Y')
 
-# what dates were reefs surveyed? just some nice code to make a table don't always need to run
+# # what dates were reefs surveyed? just some nice code to make a table don't always need to run
 # raw$Month <- as.numeric(raw$Month)
 # raw$Year <- as.numeric(raw$Year)
 # temp <- ddply(raw[which(raw$Method == "photoquad"),], .(Reef,Month,Year,Method), 'nrow')
@@ -84,9 +89,6 @@ timego$mo_yr <- as.Date(timego$mo_yr,'%d/%m/%Y')
 # baywide_alg[which(baywide_alg$kapp == max(baywide_alg$kapp)),]
 
 # GENERAL TREND OF DECLINE ------------------------------------------------------------------------------
-detach(package:plyr)     
-library(dplyr)
-
 # summarize E/K cover per survey type/method per survey date per reef
 temp <- raw %>% group_by(Reef,Method,Habitat,time.ind) %>% summarise('kapp'=mean(kapp,na.rm=T))
 temp$dum <- 1
@@ -179,13 +181,11 @@ round(pred_cor,2)
 corrplot::corrplot(pred_cor, method="circle") 
 pairs(full_pred)
 
-
 fvar <- raw2[,c('kapp','Habitat','Method','Reef','time.ind','SurveyDate',"Treatment", "Coral",
                "H_bio","sst_all_mn","dhw","wind","rain_max","par","dum")] # subset to what will go in the model
 fvar.s <- fvar # create copy
 fvar.s$Coral_p <- fvar.s$Coral/100 # proportion
 for(i in c("H_bio", "sst_all_mn","wind","rain_max","par","dhw", "Coral_p")) fvar.s[i] <- scale(fvar.s[i])[,1] # scale each predictor
-#fvar.s$Treatment <- as.factor(fvar.s$Treatment) # make random effects factors for gam to run properly
 fvar.s$Habitat <- as.factor(fvar.s$Habitat)
 fvar.s$Method <- as.factor(fvar.s$Method)
 fvar.s$Reef <- as.factor(fvar.s$Reef)
@@ -196,10 +196,8 @@ kapp.gam.all <- gam((sqrt(fvar.s$kapp_p)) ~  s(time.ind, k=4) + # note square-ro
                       s(Habitat, bs='re', by = dum) +
                       s(Method, bs='re', by = dum) +
                       s(Reef, bs='re', by = dum) +
-                      #s(Treatment, bs='re', by = dum) +
-                      Treatment + # make sure it is a factor and look into what happens
+                      Treatment + 
                       s(H_bio, k=4) +
-                      #s(Gs_p, k=4) +
                       s(Coral_p, k=4) +
                       s(dhw, k=4) +
                       s(sst_all_mn, k=4) +
@@ -211,7 +209,7 @@ kapp.gam.all <- gam((sqrt(fvar.s$kapp_p)) ~  s(time.ind, k=4) + # note square-ro
                     correlation=corAR1(~time.ind),
                     method = "REML",
                     na.action='na.fail')
-## Model Summary (Table S1) ####
+## Model Summary (Table S2) ####
 summary(kapp.gam.all)
 
 par(mfrow = c(2, 2))
@@ -360,14 +358,31 @@ ggplot(temp, aes(x = time.ind, y = H_bio)) +
 dev.off()
 
 # herbivore community composition
-detach(package:plyr)  
-library(dplyr)
-herbs <- raw %>% group_by(Month,Year,Reef) %>% summarise(Hgd=median(Hgd,na.rm=T),Hbrow=median(Hbrow,na.rm=T),Hscex=median(Hscex,na.rm=T),kapp=median(kapp,na.rm=T)) %>% ungroup() ## do something better for the kapp numbers?
+herbs <- raw %>% dplyr::group_by(Month,Year,Reef) %>% summarise(Hgd=median(Hgd,na.rm=T),Hbrow=median(Hbrow,na.rm=T),Hscex=median(Hscex,na.rm=T),
+                                                                kapp=median(kapp,na.rm=T)) %>% ungroup() 
 herbs <- herbs[!is.na(herbs$Hgd),]
 herbs$sum <- rowSums(herbs[4:6])
 herbs <- herbs[!herbs$sum==0,]
 herbs.f <- log(herbs[4:6]+1)
 herbs.mds <- suppressMessages(metaMDS(herbs.f,trace=0))
+
+## significance testing using RDA
+spp.mat <- herbs[c('Hgd','Hbrow','Hscex')]
+head(spp.mat)
+spp.mat$Hgd <- log(spp.mat$Hgd+1)
+spp.mat$Hbrow <- log(spp.mat$Hbrow+1)
+spp.mat$Hscex <- log(spp.mat$Hscex+1)
+for(i in 1:3) spp.mat[i] <- std(spp.mat[i])
+summary(spp.mat)
+
+ben.mat <- std(herbs$kapp)
+rda.f <- rda(ben.mat~.,data=spp.mat)
+anova(rda.f)
+permutest(rda.f, permutations = 1000)
+RsquareAdj(rda.f)
+plot(rda.f,scaling=3)
+summary(rda.f)
+anova(rda.f,by="terms")››
 
 ## Figure 6. Herbivore Community ####
 tiff(file='Figure 6.tif',height=1500,width=2700,res=300, compression = "lzw")
@@ -390,77 +405,84 @@ dev.off()
 
 # SUPPLEMENTAL FIGURES ------------------------------------------------------
 
-## Figure S1: Survey Effort Per Reef ####
-surveys <- aggregate(list(n = raw$Transect), by = list(date = raw$SurveyDate, Reef = raw$Reef, Method = raw$Method, Treatment = raw$Treatment), function(x) length(unique(x)))
-surveys$Reef <- as.factor(surveys$Reef)
-surveys$Method <- as.factor(surveys$Method)
-surveys$date <- as.Date(surveys$date)
-surveys$Treatment <- as.factor(surveys$Treatment)
+## Table S1: Survey Effort Per Reef ####
+surveys <- aggregate(list(n = raw$Transect), by = list(year = raw$Year, month = raw$Month,
+  date = raw$SurveyDate, 
+  Reef = raw$Reef, Method = raw$Method), #Treatment = raw$Treatment
+  function(x) length(unique(x)))
 
-surveys$t_date <- NA
-surveys$t_date <- as.Date(surveys$t_date)
-for(i in c(1:nrow(surveys))){
-  if(surveys$Reef[i] == 9){
-    surveys$t_date[i] <- "2019-05-01"
-  }
-  if(surveys$Reef[i] == 23){
-    surveys$t_date[i] <- "2019-03-01"
-  }
-  if(surveys$Reef[i] == 28){
-    surveys$t_date[i] <- "2017-09-01"
-  }
-  if(surveys$Reef[i] == 10){
-    surveys$t_date[i] <- "2014-10-01"
-  }
-  if(surveys$Reef[i] == 14){
-    surveys$t_date[i] <- "2015-10-01"
-  }
-  if(surveys$Reef[i] == 16){
-    surveys$t_date[i] <- "2015-07-01"
-  }
-  if(surveys$Reef[i] == 19){
-    surveys$t_date[i] <- "2014-10-01"
-  }
-  if(surveys$Reef[i] == 26){
-    surveys$t_date[i] <- "2011-01-01"
-  }
-  if(surveys$Reef[i] == 27){
-    surveys$t_date[i] <- "2012-03-01"
-  }
-  if(surveys$Reef[i] == 29){
-    surveys$t_date[i] <- "2012-08-01"
-  }
-}
+View(surveys)
 
-surveys$date <- as.POSIXct(surveys$date, "%Y-%m-%d")
-surveys$t_date <- as.POSIXct(surveys$t_date, "%Y-%m-%d")
-surveys$Method <- as.character(surveys$Method)
-surveys[which(surveys$Method == "photoquad"),]$Method <- "Photoquadrat"
-surveys$Method <- as.factor(surveys$Method)
-
-setwd("C:/Users/Morgan.Winston/Documents/GitHub/kaneohe-bay-algae-decline/outputs")
-tiff(file='Figure A1_new.tif',height=5000,width=4800,res=300, compression = "lzw")
-ggplot(surveys, aes(x=date, y=n, color = Method)) + 
-  geom_jitter(size = 3) +
-  geom_vline(data = surveys, mapping = aes(xintercept = t_date), show.legend = F) +
-  scale_linetype(name = " ") +
-  facet_wrap(~ Reef, ncol = 2) +
-  xlab("") +
-  ylab("Transects Conducted (#) \n") +
-  scale_x_datetime(limits = c(min(surveys[which(!is.na(surveys$t_date)),]$t_date), 
-                              max(surveys$date)), 
-                   date_breaks = "12 months", labels = date_format("%m/%Y")) +
-  #xlim(c(min(surveys[which(!is.na(surveys$t_date)),]$t_date), max(surveys$date))) +
-  theme_bw() +
-  theme(
-    panel.background = element_rect(colour = "white"),
-    panel.grid.major = element_line(colour = "white"),
-    panel.grid.minor = element_line(colour = "White"),
-    legend.position = "bottom",
-    text = element_text(size = 22),
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
-dev.off()
+## following is code for outdated figure version of survey effort:
+# surveys$Reef <- as.factor(surveys$Reef)
+# surveys$Method <- as.factor(surveys$Method)
+# surveys$date <- as.Date(surveys$date)
+# surveys$Treatment <- as.factor(surveys$Treatment)
+# 
+# surveys$t_date <- NA
+# surveys$t_date <- as.Date(surveys$t_date)
+# for(i in c(1:nrow(surveys))){
+#   if(surveys$Reef[i] == 9){
+#     surveys$t_date[i] <- "2019-05-01"
+#   }
+#   if(surveys$Reef[i] == 23){
+#     surveys$t_date[i] <- "2019-03-01"
+#   }
+#   if(surveys$Reef[i] == 28){
+#     surveys$t_date[i] <- "2017-09-01"
+#   }
+#   if(surveys$Reef[i] == 10){
+#     surveys$t_date[i] <- "2014-10-01"
+#   }
+#   if(surveys$Reef[i] == 14){
+#     surveys$t_date[i] <- "2015-10-01"
+#   }
+#   if(surveys$Reef[i] == 16){
+#     surveys$t_date[i] <- "2015-07-01"
+#   }
+#   if(surveys$Reef[i] == 19){
+#     surveys$t_date[i] <- "2014-10-01"
+#   }
+#   if(surveys$Reef[i] == 26){
+#     surveys$t_date[i] <- "2011-11-01" 
+#   }
+#   if(surveys$Reef[i] == 27){
+#     surveys$t_date[i] <- "2012-03-01"
+#   }
+#   if(surveys$Reef[i] == 29){
+#     surveys$t_date[i] <- "2012-08-01"
+#   }
+# }
+# 
+# surveys$date <- as.POSIXct(surveys$date, "%Y-%m-%d")
+# surveys$t_date <- as.POSIXct(surveys$t_date, "%Y-%m-%d")
+# surveys$Method <- as.character(surveys$Method)
+# surveys[which(surveys$Method == "photoquad"),]$Method <- "Photoquadrat"
+# surveys$Method <- as.factor(surveys$Method)
+# 
+# setwd("C:/Users/Morgan.Winston/Documents/GitHub/kaneohe-bay-algae-decline/outputs")
+# tiff(file='Figure A1_new.tif',height=5000,width=4800,res=300, compression = "lzw")
+# ggplot(surveys, aes(x=date, y=n, color = Method)) + 
+#   geom_jitter(size = 3) +
+#   geom_vline(data = surveys, mapping = aes(xintercept = t_date), show.legend = F) +
+#   scale_linetype(name = " ") +
+#   facet_wrap(~ Reef, ncol = 2) +
+#   xlab("") +
+#   ylab("Transects Conducted (#) \n") +
+#   scale_x_datetime(limits = c(min(surveys[which(!is.na(surveys$t_date)),]$t_date), 
+#                               max(surveys$date)), 
+#                    date_breaks = "12 months", labels = date_format("%m/%Y")) +
+#   #xlim(c(min(surveys[which(!is.na(surveys$t_date)),]$t_date), max(surveys$date))) +
+#   theme_bw() +
+#   theme(
+#     panel.background = element_rect(colour = "white"),
+#     panel.grid.major = element_line(colour = "white"),
+#     panel.grid.minor = element_line(colour = "White"),
+#     legend.position = "bottom",
+#     text = element_text(size = 22),
+#     axis.text.x = element_text(angle = 45, hjust = 1)
+#   )
+# dev.off()
 
 
 ## Figure S2: E/K Decline By Reef ####
