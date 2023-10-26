@@ -358,8 +358,8 @@ ggplot(temp, aes(x = time.ind, y = H_bio)) +
 dev.off()
 
 # herbivore community composition
-herbs <- raw %>% dplyr::group_by(Month,Year,Reef) %>% summarise(Hgd=median(Hgd,na.rm=T),Hbrow=median(Hbrow,na.rm=T),Hscex=median(Hscex,na.rm=T),
-                                                                kapp=median(kapp,na.rm=T)) %>% ungroup() 
+herbs <- raw %>% dplyr::group_by(Month,Year,Reef) %>% summarise(Hgd=mean(Hgd,na.rm=T),Hbrow=mean(Hbrow,na.rm=T),Hscex=mean(Hscex,na.rm=T),
+                                                                kapp=mean(kapp,na.rm=T)) %>% ungroup() 
 herbs <- herbs[!is.na(herbs$Hgd),]
 herbs$sum <- rowSums(herbs[4:6])
 herbs <- herbs[!herbs$sum==0,]
