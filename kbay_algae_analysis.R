@@ -369,20 +369,22 @@ herbs.mds <- suppressMessages(metaMDS(herbs.f,trace=0))
 ## significance testing using RDA
 spp.mat <- herbs[c('Hgd','Hbrow','Hscex')]
 head(spp.mat)
-spp.mat$Hgd <- log(spp.mat$Hgd+1)
+spp.mat$Hgd <- log(spp.mat$Hgd+1) #log + 1 transform
 spp.mat$Hbrow <- log(spp.mat$Hbrow+1)
 spp.mat$Hscex <- log(spp.mat$Hscex+1)
 for(i in 1:3) spp.mat[i] <- std(spp.mat[i])
 summary(spp.mat)
 
-ben.mat <- std(herbs$kapp)
+herbs$kapp_sq <- sqrt(herbs$kapp) # square root transform
+ben.mat <- std(herbs$kapp_sq)
 rda.f <- rda(ben.mat~.,data=spp.mat)
 anova(rda.f)
 permutest(rda.f, permutations = 1000)
 RsquareAdj(rda.f)
 plot(rda.f,scaling=3)
 summary(rda.f)
-anova(rda.f,by="terms")››
+anova.cca(rda.f,by="terms")
+
 
 ## Figure 6. Herbivore Community ####
 tiff(file='Figure 6.tif',height=1500,width=2700,res=300, compression = "lzw")
